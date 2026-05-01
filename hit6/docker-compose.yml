@@ -1,0 +1,8 @@
+services:
+  scraper:
+    build: .
+    environment:
+      - HEADLESS=true
+      - BROWSER=chrome
+    volumes:
+      - ./output:/app/output

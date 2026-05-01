@@ -1,0 +1,10 @@
+version: "3.9"
+
+services:
+  scraper:
+    build: .
+    environment:
+      - BROWSER=${BROWSER:-chrome}
+      - HEADLESS=true
+    volumes:
+      - ./output:/app/output

@@ -21,7 +21,9 @@ def create_driver(browser: str):
 
 @pytest.fixture
 def driver(request):
-    browser = request.config.getoption("--browser") or os.environ.get("BROWSER", "chrome")
+    browser = request.config.getoption("--browser") or os.environ.get(
+        "BROWSER", "chrome"
+    )
     d = create_driver(browser)
     yield d
     d.quit()
