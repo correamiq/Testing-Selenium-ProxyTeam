@@ -4,7 +4,10 @@ from selenium import webdriver
 
 
 def pytest_addoption(parser):
-    parser.addoption("--browser", action="store", default="chrome")
+    try:
+        parser.addoption("--browser", action="store", default="chrome")
+    except ValueError:
+        pass
 
 
 def create_driver(browser: str):

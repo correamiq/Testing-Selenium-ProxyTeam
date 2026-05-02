@@ -9,13 +9,11 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 from selectors_ml import (
-    SEARCH_BOX,
     ITEMS,
     TITLE,
     PRICE,
@@ -89,8 +87,11 @@ def handle_overlays(driver):
 def search(driver, product):
     # Navigate directly to results URL - avoids login wall triggered by search box
     import urllib.parse
+
     encoded = urllib.parse.quote(product)
-    search_url = f"https://listado.mercadolibre.com.ar/{encoded.replace('%20', '-').lower()}"
+    search_url = (
+        f"https://listado.mercadolibre.com.ar/{encoded.replace('%20', '-').lower()}"
+    )
     logging.info(f"Navigating directly to: {search_url}")
 
     driver.get(search_url)
@@ -109,7 +110,9 @@ def search(driver, product):
         SCREENSHOTS_DIR.mkdir(exist_ok=True)
         filename = f"error_{product.replace(' ', '_').lower()}.png"
         driver.save_screenshot(str(SCREENSHOTS_DIR / filename))
-        logging.error(f"Timeout waiting for items for {product}. Screenshot saved to {filename}")
+        logging.error(
+            f"Timeout waiting for items for {product}. Screenshot saved to {filename}"
+        )
         raise
 
 
@@ -140,20 +143,20 @@ def print_stats(product, results):
         "Max": df["precio"].max(),
         "Mediana": df["precio"].median(),
         "Desvío Std": df["precio"].std(),
-        "Cantidad": len(df)
+        "Cantidad": len(df),
     }
-    
-    print("\n" + "="*50)
+
+    print("\n" + "=" * 50)
     print(f"Resumen de precios para: {product}")
     print(tabulate([stats], headers="keys", tablefmt="grid"))
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
 
 def run():
     setup_logging()
     driver = create_driver()
     db = Database()
-    
+
     try:
         db.connect()
         db.run_migrations()
@@ -165,6 +168,7 @@ def run():
 
     for product in PRODUCTS:
         import time
+
         time.sleep(2)
         logging.info(f"Searching for: {product}")
         try:
@@ -192,11 +196,15 @@ def run():
                     next_btn = WebDriverWait(driver, 5).until(
                         EC.element_to_be_clickable(NEXT_PAGE)
                     )
-                    driver.execute_script("arguments[0].scrollIntoView(true);", next_btn)
+                    driver.execute_script(
+                        "arguments[0].scrollIntoView(true);", next_btn
+                    )
                     next_btn.click()
                     page += 1
                     # Wait for new items to load
-                    WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located(ITEMS))
+                    WebDriverWait(driver, 20).until(
+                        EC.presence_of_all_elements_located(ITEMS)
+                    )
                 except (TimeoutException, NoSuchElementException):
                     logging.info("No more pages found.")
                     break
