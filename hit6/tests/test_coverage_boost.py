@@ -16,6 +16,8 @@ def test_create_driver_chrome():
         mock_chrome.return_value = MagicMock()
         os.environ["BROWSER"] = "chrome"
         os.environ["HEADLESS"] = "true"
+        import scraper
+        scraper.create_driver()
         assert mock_chrome.called
 
 
@@ -24,6 +26,8 @@ def test_create_driver_firefox():
         mock_firefox.return_value = MagicMock()
         os.environ["BROWSER"] = "firefox"
         os.environ["HEADLESS"] = "false"
+        import scraper
+        scraper.create_driver()
         assert mock_firefox.called
 
 
