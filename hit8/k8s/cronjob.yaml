@@ -1,0 +1,37 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: scraper-hourly
+  namespace: ml-scraper
+spec:
+  schedule: "0 * * * *"
+
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: scraper
+              image: ml-scraper:latest
+              imagePullPolicy: IfNotPresent
+              command: ["python", "scraper.py"]
+
+              envFrom:
+                - configMapRef:
+                    name: scraper-config
+                - secretRef:
+                    name: db-credentials
+
+              volumeMounts:
+                - name: output
+                  mountPath: /app/output
+
+          volumes:
+            - name: output
+              persistentVolumeClaim:
+                claimName: scraper-output

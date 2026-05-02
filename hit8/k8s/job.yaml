@@ -1,0 +1,30 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: scraper-once
+  namespace: ml-scraper
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: scraper
+          image: ml-scraper:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "scraper.py"]
+
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+            - secretRef:
+                name: db-credentials
+
+          volumeMounts:
+            - name: output
+              mountPath: /app/output
+
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: scraper-output
