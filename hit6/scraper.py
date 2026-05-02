@@ -50,9 +50,11 @@ def create_driver():
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--disable-blink-features=AutomationControlled")
 
         options.add_argument(
-            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
 
         return webdriver.Chrome(options=options)
@@ -66,13 +68,14 @@ def create_driver():
 
 
 def search(driver, product):
-    driver.get(URL)
+    import urllib.parse
+    encoded = urllib.parse.quote(product)
+    # Navegación directa para evitar el muro de login/bot detection del buscador
+    search_url = f"https://listado.mercadolibre.com.ar/{encoded.replace('%20', '-').lower()}"
+    driver.get(search_url)
 
-    box = WebDriverWait(driver, 10).until(EC.element_to_be_clickable(SEARCH_BOX))
-    box.send_keys(product)
-    box.submit()
-
-    WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located(ITEMS))
+    # Espera más larga para el CI
+    WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located(ITEMS))
 
 
 def extract_item(item):
