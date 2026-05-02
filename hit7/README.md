@@ -64,3 +64,27 @@ kubectl exec -it <POD_NAME> -n ml-scraper -- ls /app/output
 ```bash
 kubectl get cronjobs -n ml-scraper
 ```
+
+**Evidencia de ejecución**
+```bash
+(venv) valentin@Debian:~/Proyectos/testing/Testing-Selenium-ProxyTeam/hit6$ kubectl get jobs -n ml-scraper
+NAME                      STATUS     COMPLETIONS   DURATION   AGE
+scraper-hourly-29628000   Complete   1/1           10s        33m
+scraper-once              Complete   1/1           12s        34m
+
+(venv) valentin@Debian:~/Proyectos/testing/Testing-Selenium-ProxyTeam/hit6$ kubectl logs -l job-name=scraper-once -n ml-scraper -f
+tests/test_coverage_boost.py      29      0   100%
+tests/test_extractors.py          10      0   100%
+tests/test_retry.py               10      0   100%
+tests/test_schema.py               6      0   100%
+--------------------------------------------------
+TOTAL                            179     16    91%
+
+Required test coverage of 70% reached. Total coverage: 91.06%
+
+============================== 8 passed in 6.40s ===============================
+
+(venv) valentin@Debian:~/Proyectos/testing/Testing-Selenium-ProxyTeam/hit6$ kubectl get cronjobs -n ml-scraper
+NAME             SCHEDULE    TIMEZONE   SUSPEND   ACTIVE   LAST SCHEDULE   AGE
+scraper-hourly   0 * * * *   <none>     False     0        34m             61m
+```
