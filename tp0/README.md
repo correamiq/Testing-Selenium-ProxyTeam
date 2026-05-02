@@ -82,8 +82,15 @@ debian   Ready    control-plane   2d22h   v1.35.4+k3s1
 ```
 
 **Output:**
-```
-# 
+```bash
+valentin@Debian:~/Proyectos/testing/Testing-Selenium-ProxyTeam/hit8$ docker save ml-scraper:latest | sudo k3s ctr images import -
+docker.io/library/ml scraper:latest             saved
+application/vnd.oci.image.index.v1+json sha256:95420fa6c28a8532c7c97a3cca28f966888ddcd5692b610d4ec40bb4bbb9467a
+Importing       elapsed: 13.6s  total:   0.0 B  (0.0 B/s)
+
+valentin@Debian:~/Proyectos/testing/Testing-Selenium-ProxyTeam/hit8$ sudo k3s ctr images list
+REF                                                                                                                TYPE                                                      DIGEST                                                                  SIZE      PLATFORMS                                                                                              LABELS                          
+docker.io/library/alpine:latest                                                                                    application/vnd.oci.image.index.v1+json                   sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 3.7 MiB   linux/386,linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64/v8,linux/ppc64le,linux/riscv64,linux/s390x io.cri-containerd.image=managed 
 ```
 
 
