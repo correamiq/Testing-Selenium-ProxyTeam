@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t ml-scraper:ci .
+        run: docker build -t ml-scraper:ci -f hit6/Dockerfile hit6
 
       - name: Run scraper
         run: |
@@ -25,7 +25,8 @@ jobs:
             -e BROWSER=${{ matrix.browser }} \
             -e HEADLESS=true \
             -v ${{ github.workspace }}/output:/app/output \
-            ml-scraper:ci
+            ml-scraper:ci \
+            python scraper.py
 
       - name: Tests + coverage
         run: |
