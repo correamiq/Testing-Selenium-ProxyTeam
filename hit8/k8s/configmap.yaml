@@ -4,7 +4,7 @@ metadata:
   name: scraper-config
   namespace: ml-scraper
 data:
-  BROWSER: "chrome"
+  BROWSER: "firefox"
   HEADLESS: "true"
   LOG_LEVEL: "INFO"
   DB_HOST: "postgres"

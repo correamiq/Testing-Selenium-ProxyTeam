@@ -58,16 +58,13 @@ def create_driver():
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
-        
-        # Bypass bot detection
         options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument(
+            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        )
 
-        driver = webdriver.Chrome(options=options)
-        # Execute script to hide webdriver property
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        return driver
+        return webdriver.Chrome(options=options)
 
     else:
         options = FirefoxOptions()
@@ -170,7 +167,11 @@ def run():
         import time
         time.sleep(2)
         logging.info(f"Searching for: {product}")
-        search(driver, product)
+        try:
+            search(driver, product)
+        except Exception as e:
+            logging.error(f"Skipping '{product}': {e}")
+            continue
 
         results = []
         page = 1
