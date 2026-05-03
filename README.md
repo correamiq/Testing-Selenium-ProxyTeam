@@ -72,3 +72,7 @@ kubectl apply -f k8s/cronjob.yaml
 # Ejecutar una vez manualmente
 kubectl apply -f k8s/job.yaml
 ```
+
+## Prerrequisitos cumplidos
+
+[README TP0](file:///home/valentin/Proyectos/testing/Testing-Selenium-ProxyTeam/tp0/README.md)
