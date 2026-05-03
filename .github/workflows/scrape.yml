@@ -19,17 +19,8 @@ jobs:
       - name: Build image
         run: docker build -t ml-scraper:ci -f hit6/Dockerfile hit6
 
-      - name: Run scraper
-        run: |
-          docker run --rm \
-            -e BROWSER=${{ matrix.browser }} \
-            -e HEADLESS=true \
-            -v ${{ github.workspace }}/output:/app/output \
-            ml-scraper:ci \
-            python scraper.py
-
       - name: Tests + coverage
         run: |
           docker run --rm \
             ml-scraper:ci \
-            pytest --cov=. --cov-fail-under=70
+            python -m pytest --cov=. --cov-fail-under=70
