@@ -61,16 +61,54 @@ kubectl get cronjobs -n ml-scraper
 
 ## Hit 8 — Kubernetes con PostgreSQL
 
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/secrets.yaml
-kubectl apply -f k8s/postgres.yaml
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/pvc.yaml
-kubectl apply -f k8s/cronjob.yaml
+## Hit #8 — Kubernetes con PostgreSQL
 
-# Ejecutar una vez manualmente
-kubectl apply -f k8s/job.yaml
+### Nuevas capacidades
+
+| Capacidad | Descripción |
+|---|---|
+| Paginación | Hasta 30 resultados navegando 3 páginas por producto |
+| Estadísticas | Tabla min/max/mediana/promedio/desvío en stdout + `output/stats.json` |
+| Histórico | Resultados persistidos en PostgreSQL para acumular corridas del CronJob |
+
+### Despliegue
+
+# 1. Crear el Secret (NUNCA commitear este archivo)
+```bash
+# El archivo k8s/postgres-secret.yaml está en .gitignore.
+# Crearlo manualmente o inyectarlo desde CI como GitHub Secret.
+cat > hit8/k8s/postgres-secret.yaml <<'EOF'
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  labels:
+    app: postgres
+type: Opaque
+stringData:
+  POSTGRES_DB: scraper_db
+  POSTGRES_USER: scraper
+  POSTGRES_PASSWORD: <tu-password-segura>
+EOF
+
+# 2. Importar imagen y aplicar manifests
+docker build -t ml-scraper:latest hit8/
+docker save ml-scraper:latest -o /tmp/ml-scraper.tar
+sudo k3s ctr images import /tmp/ml-scraper.tar && rm /tmp/ml-scraper.tar
+kubectl apply -f hit8/k8s/
+
+# 3. Esperar Postgres y seguir logs
+kubectl wait --for=condition=ready pod -l app=postgres --timeout=120s
+kubectl logs -l job-type=one-off -f
+
+# 4. Consultar histórico
+kubectl exec -it $(kubectl get pod -l app=postgres -o jsonpath='{.items[0].metadata.name}') \
+  -- psql -U scraper -d scraper_db -c \
+  "SELECT producto, MIN(precio), MAX(precio), COUNT(*) FROM scrape_results GROUP BY producto;"
+
+# 5. Limpiar
+kubectl delete -f hit8/k8s/
+kubectl delete secret postgres-credentials
 ```
 
 ## Prerrequisitos cumplidos

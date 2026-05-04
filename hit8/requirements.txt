@@ -1,8 +1,2 @@
-selenium==4.21.0
-pytest==8.2.2
-pytest-cov==5.0.0
-pre-commit
-psycopg2-binary
-pandas
-tabulate
-undetected-chromedriver
+selenium==4.16.0
+psycopg2-binary==2.9.9

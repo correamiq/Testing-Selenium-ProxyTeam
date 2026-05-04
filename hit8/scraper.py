@@ -1,232 +1,133 @@
+"""
+scraper.py — Orquestador principal del scraper de MercadoLibre Argentina.
+
+Hit #8: integra paginación (hasta 30 resultados en 3 páginas),
+estadísticas de precios por producto y escritura opcional a Postgres.
+
+Variables de entorno relevantes:
+  BROWSER    — "chrome" | "firefox" (default: "chrome")
+  HEADLESS   — "true" | "false" (default: "false")
+  PRODUCTS   — lista de productos separados por newline
+  MAX_PAGES  — páginas a paginar por producto (default: "3")
+  POSTGRES_HOST — si está definido, activa la escritura a Postgres
+  DELAY_BETWEEN_PRODUCTS — segundos entre productos (default: "5")
+"""
+
 import os
 import json
 import logging
+import re
+import time
 from pathlib import Path
-import pandas as pd
-from tabulate import tabulate
-
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
-from selectors_ml import (
-    ITEMS,
-    TITLE,
-    PRICE,
-    LINK,
-    STORE,
-    ENVIO_GRATIS,
-    CUOTAS,
-    NEXT_PAGE,
-)
-
-from extractors import (
-    safe_find_text,
-    extract_price,
-    extract_link,
-    extract_bool,
-)
 from logging_setup import setup_logging
-from database import Database
+from driver_factory import build_driver
+from pagination import scrape_all_pages, MAX_PAGES
+from stats import compute_stats, print_stats_table, save_stats
+from db import run_migrations, save_results, postgres_enabled
 
-URL = "https://www.mercadolibre.com.ar"
-PRODUCTS = [
-    "bicicleta rodado 29",
-    "iPhone 16 Pro Max",
-    "GeForce RTX 5090",
-]
+OUTPUT_DIR = Path(__file__).parent / "output"
 
-OUTPUT_DIR = Path("output")
-SCREENSHOTS_DIR = Path("screenshots")
+logger = logging.getLogger(__name__)
+
+DELAY_BETWEEN_PRODUCTS = int(os.getenv("DELAY_BETWEEN_PRODUCTS", "5"))
 
 
-def create_driver():
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def slug(text: str) -> str:
+    """Convierte un texto en un nombre de archivo seguro (snake_case ASCII)."""
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+def get_products() -> list[str]:
+    """Retorna la lista de productos desde la variable de entorno o un default."""
+    env_products = os.getenv("PRODUCTS", "")
+    if env_products.strip():
+        return [p.strip() for p in env_products.splitlines() if p.strip()]
+    return [
+        "bicicleta rodado 29",
+        "iPhone 16 Pro Max",
+        "GeForce RTX 5090",
+    ]
+
+
+def save_json(results: list[dict], product: str) -> None:
+    """Persiste los resultados de un producto en output/<slug>.json."""
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    filename = slug(product)
+    out_path = OUTPUT_DIR / f"{filename}.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+    logger.info("JSON escrito exitosamente -> %s", out_path)
+
+
+# ---------------------------------------------------------------------------
+# Punto de entrada
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    setup_logging()
+    products = get_products()
     browser = os.getenv("BROWSER", "chrome")
     headless = os.getenv("HEADLESS", "false").lower() == "true"
+    max_pages = MAX_PAGES
 
-    if browser == "chrome":
-        options = ChromeOptions()
-        if headless:
-            options.add_argument("--headless=new")
-
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--disable-blink-features=AutomationControlled")
-        options.add_argument(
-            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        )
-
-        return webdriver.Chrome(options=options)
-
-    else:
-        options = FirefoxOptions()
-        if headless:
-            options.add_argument("--headless")
-
-        return webdriver.Firefox(options=options)
-
-
-def handle_overlays(driver):
-    try:
-        driver.execute_script("""
-            const banner = document.querySelector('.cookie-consent-banner-opt-out');
-            if (banner) banner.remove();
-            const modal = document.querySelector('.andes-modal-stack');
-            if (modal) modal.remove();
-        """)
-    except Exception:
-        pass
-
-
-def search(driver, product):
-    # Navigate directly to results URL - avoids login wall triggered by search box
-    import urllib.parse
-
-    encoded = urllib.parse.quote(product)
-    search_url = (
-        f"https://listado.mercadolibre.com.ar/{encoded.replace('%20', '-').lower()}"
+    logger.info(
+        "Iniciando scraper | productos=%d | browser=%s | headless=%s | max_pages=%d | delay=%ds",
+        len(products), browser, headless, max_pages, DELAY_BETWEEN_PRODUCTS,
     )
-    logging.info(f"Navigating directly to: {search_url}")
 
-    driver.get(search_url)
-
-    # Detect login redirect
-    if "ingresa" in driver.title.lower() or "login" in driver.current_url.lower():
-        SCREENSHOTS_DIR.mkdir(exist_ok=True)
-        filename = f"login_wall_{product.replace(' ', '_').lower()}.png"
-        driver.save_screenshot(str(SCREENSHOTS_DIR / filename))
-        logging.error(f"Login wall detected for '{product}'. Screenshot: {filename}")
-        raise TimeoutException(f"Login wall detected for '{product}'")
-
-    try:
-        WebDriverWait(driver, 20).until(EC.presence_of_all_elements_located(ITEMS))
-    except TimeoutException:
-        SCREENSHOTS_DIR.mkdir(exist_ok=True)
-        filename = f"error_{product.replace(' ', '_').lower()}.png"
-        driver.save_screenshot(str(SCREENSHOTS_DIR / filename))
-        logging.error(
-            f"Timeout waiting for items for {product}. Screenshot saved to {filename}"
-        )
-        raise
-
-
-def extract_item(item):
-    return {
-        "titulo": safe_find_text(item, TITLE),
-        "precio": extract_price(item, PRICE),
-        "link": extract_link(item, LINK),
-        "tienda_oficial": safe_find_text(item, STORE),
-        "envio_gratis": extract_bool(item, ENVIO_GRATIS),
-        "cuotas_sin_interes": safe_find_text(item, CUOTAS),
-    }
-
-
-def print_stats(product, results):
-    df = pd.DataFrame(results)
-    if df.empty or "precio" not in df or df["precio"].isnull().all():
-        logging.warning(f"No price data available for {product}")
-        return
-
-    # Clean prices (ensure they are numeric)
-    df["precio"] = pd.to_numeric(df["precio"], errors="coerce")
-    df = df.dropna(subset=["precio"])
-
-    stats = {
-        "Producto": product,
-        "Min": df["precio"].min(),
-        "Max": df["precio"].max(),
-        "Mediana": df["precio"].median(),
-        "Desvío Std": df["precio"].std(),
-        "Cantidad": len(df),
-    }
-
-    print("\n" + "=" * 50)
-    print(f"Resumen de precios para: {product}")
-    print(tabulate([stats], headers="keys", tablefmt="grid"))
-    print("=" * 50 + "\n")
-
-
-def run():
-    setup_logging()
-    driver = create_driver()
-    db = Database()
-
-    try:
-        db.connect()
-        db.run_migrations()
-    except Exception as e:
-        logging.error(f"Could not initialize DB: {e}. Proceeding without DB.")
-        db = None
+    # Ejecutar migrations de Postgres (solo si está habilitado)
+    if postgres_enabled():
+        logger.info("Postgres habilitado — ejecutando migrations")
+        run_migrations()
 
     OUTPUT_DIR.mkdir(exist_ok=True)
+    driver = build_driver(browser=browser, headless=headless)
 
-    for product in PRODUCTS:
-        import time
+    all_stats = []
 
-        time.sleep(2)
-        logging.info(f"Searching for: {product}")
-        try:
-            search(driver, product)
-        except Exception as e:
-            logging.error(f"Skipping '{product}': {e}")
-            continue
-
-        results = []
-        page = 1
-        while len(results) < 30 and page <= 3:
-            logging.info(f"Extracting results from page {page}...")
-            items = WebDriverWait(driver, 20).until(
-                EC.presence_of_all_elements_located(ITEMS)
+    try:
+        for idx, product in enumerate(products):
+            logger.info("=== Procesando producto: %s ===", product)
+            results = scrape_all_pages(
+                driver, product, max_pages=max_pages, results_per_page=10
             )
 
-            for item in items:
-                if len(results) >= 30:
-                    break
-                data = extract_item(item)
-                results.append(data)
-
-            if len(results) < 30 and page < 3:
-                try:
-                    next_btn = WebDriverWait(driver, 5).until(
-                        EC.element_to_be_clickable(NEXT_PAGE)
-                    )
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView(true);", next_btn
-                    )
-                    next_btn.click()
-                    page += 1
-                    # Wait for new items to load
-                    WebDriverWait(driver, 20).until(
-                        EC.presence_of_all_elements_located(ITEMS)
-                    )
-                except (TimeoutException, NoSuchElementException):
-                    logging.info("No more pages found.")
-                    break
+            # Persistir JSON local
+            if results:
+                save_json(results, product)
             else:
-                break
+                logger.warning(
+                    "Sin resultados para el producto '%s', no se escribe JSON", product
+                )
 
-        # Print stats
-        print_stats(product, results)
+            # Persistir en Postgres (opcional)
+            if postgres_enabled():
+                save_results(results, product, browser)
 
-        # Save to JSON
-        filename = product.replace(" ", "_").lower() + ".json"
-        with open(OUTPUT_DIR / filename, "w") as f:
-            json.dump(results, f, indent=2)
+            # Calcular estadísticas para la tabla resumen
+            stats = compute_stats(results, product)
+            all_stats.append(stats)
 
-        # Save to DB
-        if db:
-            db.save_results(product, results)
+            # Pausa entre productos para evitar throttling (excepto el último)
+            if idx < len(products) - 1:
+                logger.info("Esperando %ds antes del siguiente producto...", DELAY_BETWEEN_PRODUCTS)
+                time.sleep(DELAY_BETWEEN_PRODUCTS)
 
-    driver.quit()
-    if db:
-        db.close()
+    finally:
+        driver.quit()
+        logger.info("Driver cerrado correctamente")
+
+    # Imprimir tabla de resumen y guardar stats.json
+    print_stats_table(all_stats)
+    save_stats(all_stats, output_dir=str(OUTPUT_DIR))
 
 
 if __name__ == "__main__":
-    run()
+    main()
