@@ -1,0 +1,7 @@
+config:
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+
+# Extra labels for pods
+extraArgs:
+  - -client.external-labels=cluster=k3s
